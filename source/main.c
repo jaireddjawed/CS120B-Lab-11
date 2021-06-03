@@ -15,9 +15,9 @@
 #endif
 
 enum Vertical_Ball_States {ShiftUp, ShiftDown};
-static unsigned char row = 0xFE;
-
 int Vertical_Ball_SM_Tick(int state) {
+	static unsigned char row = 0xFE;
+
 	switch (state) {
 		case ShiftUp:
 			if (row == 0xFE) {
@@ -45,14 +45,15 @@ int Vertical_Ball_SM_Tick(int state) {
 			break;
 	}
 
+	//PORTD = row;
+
 	return state;
 }
 
 
 enum Horizontal_Ball_States {ShiftLeft, ShiftRight};
-static unsigned char col = 0x80;
-
 int Horizontal_Ball_SM_Tick(int state) {
+	static unsigned char col = 0x80;
 	switch (state) {
 		case ShiftLeft:
 			if (col == 0x80) {
@@ -80,6 +81,8 @@ int Horizontal_Ball_SM_Tick(int state) {
 			break;
 	}
 
+	//PORTC = col;
+
 	return state;
 }
 
@@ -88,28 +91,21 @@ enum State {State1};
 //static unsigned char startRow = 0xF1;
 
 int Player_SM_Tick(int state) {
-	unsigned char tmpD = PIND;
 
 	if (~PINB & 0x01 && PIND <= 0xF9) {
-		tmpD = (0x01 << 7) | (tmpD >> 1);
+		PORTD = (0x01 << 7) | (PIND >> 1);
 	}
 
+	
 	if (~PINB & 0x02 && PIND >= 0xF3) {
-		tmpD = tmpD^0x80;
-		tmpD = (tmpD << 1) | 0x01;
+		unsigned char tmpD;
+		tmpD = PIND^0x80;
+		PORTD = (tmpD << 1) | 0x01;
 	}
 
-	PORTD = tmpD;
-	PORTC = 0x40; 
-
 	return state;
 }
 
-enum S {S1};
-int Player_CPU_SM_Tick(int state) {
-
-	return state;
-}
 
 int main(void) {
     /* Insert DDR and PORT initializations */
@@ -117,8 +113,8 @@ int main(void) {
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
 
-	static task task1, task2, task3, task4;
-	task *tasks[] = { &task1, &task2, &task3, &task4 };
+	static task task1, task2, task3;
+	task *tasks[] = { &task1, &task2, &task3 };
 	unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 
 	task1.state = ShiftDown;
@@ -131,20 +127,16 @@ int main(void) {
 	task2.elapsedTime = task2.period;
 	task2.TickFct = &Horizontal_Ball_SM_Tick;
 
+	
 	task3.state = State1;
 	task3.period = 50;
 	task3.elapsedTime = task3.period;
 	task3.TickFct = &Player_SM_Tick;
 
-	task4.state = S1;
-	task4.period = 50;
-	task4.elapsedTime = task4.period;
-	task4.TickFct = &Player_CPU_SM_Tick;
-
 	TimerSet(50);
 	TimerOn();
-	
-	PORTC = 0x40;
+
+	PORTC = 0x80;
 	PORTD = 0xF9;
 
 	unsigned short i;
