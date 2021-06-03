@@ -88,15 +88,25 @@ enum State {State1};
 //static unsigned char startRow = 0xF1;
 
 int Player_SM_Tick(int state) {
+	unsigned char tmpD = PIND;
+
 	if (~PINB & 0x01 && PIND <= 0xF9) {
-		PORTD = (0x01 << 7) | (PORTD >> 1);
+		tmpD = (0x01 << 7) | (tmpD >> 1);
 	}
 
 	if (~PINB & 0x02 && PIND >= 0xF3) {
-		unsigned char tmp = PIND;
-		tmp = tmp^0x80;
-		PORTD = (tmp << 1) | 0x01;
+		tmpD = tmpD^0x80;
+		tmpD = (tmpD << 1) | 0x01;
 	}
+
+	PORTD = tmpD;
+	PORTC = 0x40; 
+
+	return state;
+}
+
+enum S {S1};
+int Player_CPU_SM_Tick(int state) {
 
 	return state;
 }
@@ -107,8 +117,8 @@ int main(void) {
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0xFF; PORTD = 0x00;
 
-	static task task1, task2, task3;
-	task *tasks[] = { &task1, &task2, &task3 };
+	static task task1, task2, task3, task4;
+	task *tasks[] = { &task1, &task2, &task3, &task4 };
 	unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 
 	task1.state = ShiftDown;
@@ -125,6 +135,11 @@ int main(void) {
 	task3.period = 50;
 	task3.elapsedTime = task3.period;
 	task3.TickFct = &Player_SM_Tick;
+
+	task4.state = S1;
+	task4.period = 50;
+	task4.elapsedTime = task4.period;
+	task4.TickFct = &Player_CPU_SM_Tick;
 
 	TimerSet(50);
 	TimerOn();
