@@ -45,8 +45,13 @@ int Vertical_Ball_SM_Tick(int state) {
 	switch (state) {
 		case ShiftUp:
 			// side paddle collision collision detection
-			if ((col == 0x40 && ((player1Row >> 1) & tmp) != 0) || (col == 0x02 && ((player2Row >> 1) & tmp) != 0)) {
+			if (col == 0x40 && ((player1Row >> 1) & tmp) != 0 /*|| (col == 0x02 && ((player2Row << 1) & tmp) != 0)*/) {
 				state = ShiftDown;
+
+				// speed up ball once a side paddle hits it
+				if (ballSpeed >= 6000) {
+					ballSpeed -= 1000;
+				}
 			}
 			else if (row == 0xFE) {
 				state = ShiftDown;
@@ -54,8 +59,13 @@ int Vertical_Ball_SM_Tick(int state) {
 			break;
 		case ShiftDown:
 			// side paddle collision detection
-			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0) || (col == 0x02 && ((player2Row >> 1) & tmp) != 0)) {
+			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0) /*|| (col == 0x02 && ((player2Row << 1) & tmp) != 0) */) {
 				state = ShiftUp;
+
+				// speed up side paddle once 
+				if (ballSpeed >= 6000) {
+					ballSpeed -= 100;
+				}
 			}
 			else if (row == 0xEF) {
 				state = ShiftUp;
@@ -111,6 +121,11 @@ int Horizontal_Ball_SM_Tick(int state) {
 			// horizontal ball collision detection
 			if (col == 0x40 && player1Count == 1) {
 				state = ShiftRight;
+
+				// slow down ball
+				if (ballSpeed <= 8000) {
+					ballSpeed += 100;
+				}
 			}
 			else if (col == 0x80) {
 				state = ShiftRight;
@@ -120,6 +135,11 @@ int Horizontal_Ball_SM_Tick(int state) {
 			// horizontal ball collision detection
 			if (col == 0x02 && player2Count == 1) {
 				state = ShiftLeft;
+
+				// slow down ball
+				if (ballSpeed <= 8000) {
+					ballSpeed += 100;
+				}
 			}
 			else if (col == 0x01) {
 				state = ShiftLeft;
@@ -241,6 +261,8 @@ int Reset_SM_Tick(int state) {
 			// reset player 1 and 2 to default row
 			player1Row = 0xF1;
 			player2Row = 0xF1;
+
+			ballSpeed = 7000;
 			break;
 		case ResetButtonWait:
 		case ResetButtonRelease:
