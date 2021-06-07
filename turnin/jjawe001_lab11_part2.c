@@ -57,7 +57,7 @@ int Vertical_Ball_SM_Tick(int state) {
 			break;
 		case ShiftUp:
 			// side paddle collision collision detection
-			if (col == 0x40 && ((player1Row >> 1) & tmp) != 0 /*|| (col == 0x02 && ((player2Row << 1) & tmp) != 0) */) {
+			if (col == 0x40 && ((player1Row >> 1) & tmp) != 0 || (col == 0x02 && ((player2Row << 1) & tmp) != 0)) {
 				state = ShiftDown;
 
 				// speed up ball once a side paddle hits it
@@ -71,7 +71,7 @@ int Vertical_Ball_SM_Tick(int state) {
 			break;
 		case ShiftDown:
 			// side paddle collision detection
-			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0)/* || (col == 0x02 && ((player2Row << 1) & tmp) != 0) */) {
+			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0) || (col == 0x02 && ((player2Row << 1) & tmp) != 0)) {
 				state = ShiftUp;
 
 				// speed up side paddle once 
