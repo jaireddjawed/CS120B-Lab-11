@@ -32,6 +32,10 @@ unsigned char player2Score = 0x00;
 unsigned char player1Row = 0xF1;
 unsigned char player2Row = 0xF1;
 
+int getRandomNum() {
+	return rand();
+}
+
 enum Vertical_Ball_States {ShiftUp, ShiftDown} vertical_ball_state;
 int Vertical_Ball_SM_Tick(int state) {
 	switch (state) {
@@ -204,18 +208,62 @@ int Reset_SM_Tick(int state) {
 	return state;
 }
 
-enum States {Row1, Row2, Row3} my_state;
+enum {S1} ai_state;
+int AI_SM_Tick(int state) {
+	// if the ball is in the column and the player is not there
+	// collision detection elsewhere
+	// if the ball is one column ahead and in the same row
+	// as one of the piecies of the paddle
+	
+	if (col == 0x80) {
+		if (player2Score == 0x07) {
+			player1Score = 0x00;
+			player2Score = 0x00;
+			PORTB = 0x03;
+		}
+		player2Score = (player2Score << 1) | 0x01;
+	}
+	if (col == 0x01) {
+		if (player1Score == 0x07) {
+			player1Score = 0x00;
+			player2Score = 0x00;
+			PORTB = 0x03;
+		}
+		player1Score = (player1Score << 1) | 0x01;
+	}
+
+	
+	int move = getRandomNum() % 2;
+	if (col == 0x08 && move == 0 && player2Row <= topRow) {
+		player2Row = (0x01 << 7) | (player2Row >> 1);
+	}
+	if(col == 0x08 && move == 1 && player2Row >= bottomRow) {
+		unsigned char tmp = player2Row;
+		tmp ^= 0x80;
+		player2Row = (tmp << 1) | 0x01;
+	}
+
+	PORTB = (player2Score << 5) | (player1Score << 2) | PORTB;
+
+	return state;
+}
+
+enum States {P1Row, P2Row, BallRow} combine_state;
 int Combine_SM_Tick(int state) {
 	switch (state) {
-		case Row1:
+		case P1Row:
 			PORTD = player1Row;
 			PORTC = 0x80;
-			state = Row3;
+			state = P2Row;
 			break;
-		case Row3:
+		case P2Row:
+			PORTD = player2Row;
+			PORTC = 0x01;
+			state = BallRow;
+		case BallRow:
 			PORTD = row;
 			PORTC = col;
-			state = Row1;
+			state = P1Row;
 			break;
 		default:
 			break;
@@ -233,8 +281,8 @@ int main(void) {
 
 	srand(time(NULL));
 
-	static task task1, task2, task3, task4, task5;
-	task *tasks[] = { &task1, &task2, &task3, &task4, &task5 };
+	static task task1, task2, task3, task4, task5, task6;
+	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6 };
 	unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 
   	task1.state = ShiftDown;
@@ -257,10 +305,15 @@ int main(void) {
 	task4.elapsedTime = task4.period;
 	task4.TickFct = &Player1_SM_Tick;
 
-  task5.state = ResetButtonWait;
+	task5.state = S1;
 	task5.period = 7000;
 	task5.elapsedTime = task5.period;
-	task5.TickFct = &Reset_SM_Tick;
+	task5.TickFct = &AI_SM_Tick;
+
+  task6.state = ResetButtonWait;
+	task6.period = ballSpeed;
+	task6.elapsedTime = task5.period;
+	task6.TickFct = &Reset_SM_Tick;
 
 	TimerSet(1);
 	TimerOn();
