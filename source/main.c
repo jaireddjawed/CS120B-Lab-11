@@ -17,16 +17,20 @@
 #include "scheduler.h"
 #include "timer.h"
 #endif
+
+// ball row and column
 unsigned char row = 0xFE;
 unsigned char col = 0x10;
 
+// default speed of ball
 int ballSpeed = 7000;
 
 unsigned char player1Score = 0x00;
 unsigned char player2Score = 0x00;
 
-unsigned char player1Row = 0xF8;
-unsigned char player2Row = 0xF8;
+// row of player 1 and 2
+unsigned char player1Row = 0xF1;
+unsigned char player2Row = 0xF1;
 
 enum Vertical_Ball_States {ShiftUp, ShiftDown} vertical_ball_state;
 int Vertical_Ball_SM_Tick(int state) {
@@ -153,8 +157,52 @@ int Player1_SM_Tick(int state) {
 enum ResetStates {
 	ResetButtonWait,
 	ResetButtonPress,
-        ResetButtonRelease
+  ResetButtonRelease
 } reset_state;
+
+int Reset_SM_Tick(int state) {
+	switch (state) {
+		case ResetButtonWait:
+			if (~PIND & 0x80) {
+				state = ResetButtonPress;
+			}
+			break;
+		case ResetButtonPress:
+			state = ResetButtonRelease;
+			break;
+		case ResetButtonRelease:
+			if (!(~PIND & 0x80)) {
+				state = ResetButtonWait;
+			}
+			break;
+		default:
+			break;
+	}
+
+	switch (state) {
+		// reset everything to default states
+		case ResetButtonPress:
+		  // reset scores
+			PORTB = 0x03;
+			player1Score = 0x00;
+			player2Score = 0x00;
+			
+			// reset ball row and column
+			row = 0xFE;
+			col = 0x10;
+			
+			// reset player 1 and 2 to default row
+			player1Row = 0xF1;
+			player2Row = 0xF1;
+			break;
+		case ResetButtonWait:
+		case ResetButtonRelease:
+		default:
+			break;
+	}
+
+	return state;
+}
 
 enum States {Row1, Row2, Row3} my_state;
 int Combine_SM_Tick(int state) {
@@ -185,8 +233,8 @@ int main(void) {
 
 	srand(time(NULL));
 
-	static task task1, task2, task3, task4;
-	task *tasks[] = { &task1, &task2, &task3, &task4 };
+	static task task1, task2, task3, task4, task5;
+	task *tasks[] = { &task1, &task2, &task3, &task4, &task5 };
 	unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 
   	task1.state = ShiftDown;
@@ -208,6 +256,11 @@ int main(void) {
 	task4.period = 100;
 	task4.elapsedTime = task4.period;
 	task4.TickFct = &Player1_SM_Tick;
+
+  task5.state = ResetButtonWait;
+	task5.period = 100;
+	task5.elapsedTime = task5.period;
+	task5.TickFct = &Reset_SM_Tick;
 
 	TimerSet(1);
 	TimerOn();
