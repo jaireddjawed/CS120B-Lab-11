@@ -6,7 +6,9 @@
  *
  *	I acknowledge all content contained herein, excluding template or example
  *	code, is my own original work.
+
  */
+
 #include <avr/io.h>
 #include <stdlib.h>
 #include <time.h>
@@ -18,51 +20,48 @@
 #include "timer.h"
 #endif
 
+// ball row and column
+unsigned char row = 0xFE;
+unsigned char col = 0x10;
+
+// default speed of ball
+int ballSpeed = 7000;
+
+unsigned char player1Score = 0x00;
+unsigned char player2Score = 0x00;
+
+// row of player 1 and 2
+unsigned char player1Row = 0xF1;
+unsigned char player2Row = 0xF1;
+
 int getRandomNum() {
 	return rand();
 }
 
-
-enum Vertical_Ball_States {ShiftUp, ShiftDown};
-static unsigned char row = 0xFE;
-static unsigned char col = 0x10;
-
-unsigned char rows[2] = {0xE3, 0xF8};
-unsigned char player1Row;
-unsigned char player2Row;
-
-
-int ballSpeed=7000;
-
+enum Vertical_Ball_States {VBallStart, ShiftUp, ShiftDown} vertical_ball_state;
 int Vertical_Ball_SM_Tick(int state) {
-	unsigned char op = ~row;
-	// get 0 bit of ball row
-	op = (log(op & -op)/log(2)) + 1;
-			
-	// hits player1 side or player1 paddle
-	int topPaddle = (player1Row & (1 << ((op - 1) - 1))) >> ((op - 1) - 1);
-	int centerPaddle = (player1Row & (1 << (op - 1))) >> (op - 1);
-	int bottomPaddle = (player1Row & (1 << ((op + 1) - 1))) >> ((op + 1) - 1);
-
-	// hits ai side or ai paddle
-	int aiTopPaddle = (rows[1] & (1 << ((op - 1) - 1))) >> ((op - 1) - 1);
-	int aiCenterPaddle = (rows[1] & (1 << (op - 1))) >> (op - 1);
-	int aiBottomPaddle = (rows[1] & (1 << (op + 1) - 1)) >> ((op + 1) - 1);
-
+	unsigned char tmp = ~row;
 
 	switch (state) {
 		case ShiftUp:
-			if (row == 0xFE || (col == 0x40 && centerPaddle == 0 && bottomPaddle == 0) || (col == 0x02 && aiCenterPaddle == 0 && aiTopPaddle == 0)) {
+			// side paddle collision collision detection
+			if ((col == 0x40 && ((player1Row >> 1) & tmp) != 0) || (col == 0x02 && ((player2Row >> 1) & tmp) != 0)) {
+				state = ShiftDown;
+			}
+			else if (row == 0xFE) {
 				state = ShiftDown;
 			}
 			break;
 		case ShiftDown:
-			if (row == 0xEF || (col == 0x40 && topPaddle == 0 && centerPaddle == 0) || (col == 0x02 && aiBottomPaddle == 0 && aiCenterPaddle == 0)) {
+			// side paddle collision detection
+			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0) || (col == 0x02 && ((player2Row >> 1) & tmp) != 0)) {
+				state = ShiftUp;
+			}
+			else if (row == 0xEF) {
 				state = ShiftUp;
 			}
 			break;
 		default:
-			state = ShiftDown;
 			break;
 	}
 
@@ -80,37 +79,49 @@ int Vertical_Ball_SM_Tick(int state) {
 	return state;
 }
 
-
-enum Horizontal_Ball_States {ShiftLeft, ShiftRight} hball_state;
-
-unsigned char player1Score = 0x00;
-unsigned char player2Score = 0x00;
-
+enum Horizontal_Ball_States {ShiftLeft, ShiftRight} horizontal_ball_state;
 int Horizontal_Ball_SM_Tick(int state) {
-	unsigned char op = ~row;
-	// get 0 bit of ball row
-	op = (log(op & -op)/log(2)) + 1;
-			
+	unsigned char tmp1 = ~player1Row;
+	unsigned char tmp2 = ~player2Row;
+	unsigned char tmp3 = ~row;
 
-	// hits player1 side or player1 paddle
-	int topPaddle = (player1Row & (1 << ((op - 1) - 1))) >> ((op - 1) - 1);
-	int centerPaddle = (player1Row & (1 << (op - 1))) >> (op - 1);
-	int bottomPaddle = (player1Row & (1 << ((op + 1) - 1))) >> ((op + 1) - 1);
+	unsigned char player1Count = 0;
+	unsigned char player2Count = 0;
 
-	// hits ai side or ai paddle
-	int aiTopPaddle = (rows[1] & (1 << ((op - 1) - 1))) >> ((op - 1) - 1);
-	int aiCenterPaddle = (rows[1] & (1 << (op - 1))) >> (op - 1);
-	int aiBottomPaddle = (rows[1] & (1 << (op + 1) - 1)) >> ((op + 1) - 1);
+
+
+	while (tmp1 && tmp3) {
+		player1Count += tmp1 & tmp3 & 1;
+		tmp1>>=1;
+		tmp3>>=1;
+	}
+
+	tmp3 = ~row;
+
+	while (tmp2 && tmp3) {
+		player2Count += tmp2 & tmp3 & 1;
+		tmp2>>=1;
+		tmp3>>=1;
+	}
 
 	switch (state) {
 		case ShiftLeft:		
 			// make the ball's x direction go in the opposite direction if it hits the center paddle
-			if (col == 0x80 || (col == 0x40 && topPaddle == 0 && centerPaddle == 0 && bottomPaddle == 0)) {
+			
+			// horizontal ball collision detection
+			if (col == 0x40 && player1Count == 1) {
+				state = ShiftRight;
+			}
+			else if (col == 0x80) {
 				state = ShiftRight;
 			}
 			break;
 		case ShiftRight:
-			if (col == 0x01 || (col == 0x02 && aiTopPaddle == 0 && aiCenterPaddle == 0 && aiBottomPaddle == 0)) {
+			// horizontal ball collision detection
+			if (col == 0x02 && player2Count == 1) {
+				state = ShiftLeft;
+			}
+			else if (col == 0x01) {
 				state = ShiftLeft;
 			}
 			break;
@@ -133,135 +144,56 @@ int Horizontal_Ball_SM_Tick(int state) {
 	return state;
 }
 
-enum State {Player1Start, Player1UpKeyPress, Player1UpKeyRelease, Player1DownKeyPress, Player1DownKeyRelease} player1_state;
-unsigned char topRow = 0xF1;
-unsigned char bottomRow = 0xf1;
+enum State {
+	P1Start,
+	P1UpKeyPress,
+	P1UpKeyRelease,
+	P1DownKeyPress,
+	P1DownKeyRelease
+} player1_state;
 
-int Player_SM_Tick(int state) {
-	player1Row = rows[0];
-
+int Player1_SM_Tick(int state) {
 	switch (state) {
-		case Player1Start:
+		case P1Start:
 			if (~PINB & 0x01) {
-				state = Player1UpKeyPress;
+				state = P1UpKeyPress;
 			}
 			if (~PINB & 0x02) {
-				state = Player1DownKeyPress;
+				state = P1DownKeyPress;
 			}
 			break;
-		case Player1UpKeyPress:
-			state = Player1UpKeyRelease;
+		case P1UpKeyPress:
+			state = P1UpKeyRelease;
 			break;
-		case Player1UpKeyRelease:
+		case P1UpKeyRelease:
 			if (!(~PINB & 0x01)) {
-				state = Player1Start;
-			}
-			else {
-				state = Player1UpKeyRelease;
+				state = P1Start;
 			}
 			break;
-		case Player1DownKeyPress:
-			state = Player1DownKeyRelease;
+		case P1DownKeyPress:
+			state = P1DownKeyRelease;
 			break;
-		case Player1DownKeyRelease:
+		case P1DownKeyRelease:
 			if (!(~PINB & 0x02)) {
-				state = Player1Start;
-			}
-			else {
-				state = Player1DownKeyRelease;
+				state = P1Start;
 			}
 			break;
 		default:
-			state = Player1Start;
 			break;
 	}
 
 	switch (state) {
-		case Player1UpKeyPress:
-			if (player1Row <= topRow) {
+		case P1UpKeyPress:
+			if (player1Row <= 0xF1) {
 				player1Row = (0x01 << 7) | (player1Row >> 0x01);
 			}
 			break;
-		case Player1DownKeyPress:
-			if (player1Row >= bottomRow) {
-				player1Row ^= 0x80;
-				player1Row = (player1Row << 1) | 0x01;
+		case P1DownKeyPress:
+			if (player1Row >= 0xF1) {
+				unsigned char tmp = player1Row;
+				tmp^=0x80;
+				player1Row = (tmp << 1) | 0x01;
 			}
-			break;
-		case Player1Start:
-		case Player1UpKeyRelease:
-		case Player1DownKeyRelease:
-		default:
-			break;
-	}
-
-
-	rows[0] = player1Row;
-
-	return state;
-}
-
-enum {S1} ai_state;
-int AI_SM_Tick(int state) {
-	// if the ball is in the column and the player is not there
-	// collision detection elsewhere
-	// if the ball is one column ahead and in the same row
-	// as one of the piecies of the paddle
-	
-	if (col == 0x80) {
-		if (player2Score == 0x07) {
-			player1Score = 0x00;
-			player2Score = 0x00;
-			PORTB = 0x03;
-		}
-		player2Score = (player2Score << 1) | 0x01;
-	}
-	if (col == 0x01) {
-		if (player1Score == 0x07) {
-			player1Score = 0x00;
-			player2Score = 0x00;
-			PORTB = 0x03;
-		}
-		player1Score = (player1Score << 1) | 0x01;
-	}
-
-	
-	int move = getRandomNum() % 2;
-	if (col == 0x08 && move == 0 && rows[1] <= topRow) {
-		rows[1] = (0x01 << 7) | (rows[1] >> 1);
-	}
-	if(col == 0x08 && move == 1 && rows[1] >= bottomRow) {
-		unsigned char test = rows[1];
-		test ^= 0x80;
-		rows[1] = (test << 1) | 0x01;
-	}
-
-	PORTB = (player2Score << 5) | (player1Score << 2) | PORTB;
-
-	return state;
-}
-
-enum States {Row1, Row2, Row3} my_state;
-int Combine_SM_Tick(int state) {
-	unsigned char ballCol = 0x08;
-	unsigned char ballRow = 0xFE;
-
-	switch (state) {
-		case Row1:
-			PORTD = rows[0];
-			PORTC = 0x80;
-			state = Row2;
-			break;
-		case Row2:
-			PORTD = rows[1];
-			PORTC = 0x01;
-			state = Row3;
-			break;
-		case Row3:
-			PORTD = row;
-			PORTC = col;
-			state = Row1;
-			break;
 		default:
 			break;
 	}
@@ -269,7 +201,12 @@ int Combine_SM_Tick(int state) {
 	return state;
 }
 
-enum ResetStates {ResetButtonWait, ResetButtonPress, ResetButtonRelease} reset_state;
+enum ResetStates {
+	ResetButtonWait,
+	ResetButtonPress,
+  ResetButtonRelease
+} reset_state;
+
 int Reset_SM_Tick(int state) {
 	switch (state) {
 		case ResetButtonWait:
@@ -292,19 +229,110 @@ int Reset_SM_Tick(int state) {
 	switch (state) {
 		// reset everything to default states
 		case ResetButtonPress:
+		  // reset scores
 			PORTB = 0x03;
-			
 			player1Score = 0x00;
 			player2Score = 0x00;
 			
+			// reset ball row and column
 			row = 0xFE;
 			col = 0x10;
 			
-			rows[0] = 0xF1;
-			rows[1] = 0xF1;
+			// reset player 1 and 2 to default row
+			player1Row = 0xF1;
+			player2Row = 0xF1;
 			break;
 		case ResetButtonWait:
 		case ResetButtonRelease:
+		default:
+			break;
+	}
+
+	return state;
+}
+
+enum {AIInit, AIWait} ai_state;
+int AI_SM_Tick(int state) {
+	// if the ball is in the column and the player is not there
+	// collision detection elsewhere
+	// if the ball is one column ahead and in the same row
+	// as one of the piecies of the paddle
+	
+
+	switch (state) {
+		case AIInit:
+			state = AIWait;
+			break;
+		case AIWait:
+		default:
+			break;
+	}
+
+
+	int move;
+
+	switch (state) {
+		case AIWait:
+
+			move = getRandomNum() % 2;
+
+			if (col == 0x08 && move == 0 && player2Row <= 0xF1) {
+				player2Row = (0x01 << 7) | (player2Row >> 1);
+			}
+			if(col == 0x08 && move == 1 && player2Row >= 0xF1) {
+				unsigned char tmp = player2Row;
+				tmp ^= 0x80;
+				player2Row = (tmp << 1) | 0x01;
+			}
+			break;
+		case AIInit:
+		default:
+			break;
+	}
+
+
+	if (col == 0x80) {
+		if (player2Score == 0x07) {
+			player1Score = 0x00;
+			player2Score = 0x00;
+			PORTB = 0x03;
+		}
+		player2Score = (player2Score << 1) | 0x01;
+	}
+	if (col == 0x01) {
+		if (player1Score == 0x07) {
+			player1Score = 0x00;
+			player2Score = 0x00;
+			PORTB = 0x03;
+		}
+		player1Score = (player1Score << 1) | 0x01;
+	}
+
+	
+
+	PORTB = (player2Score << 5) | (player1Score << 2) | PORTB;
+
+	return state;
+}
+
+enum States {P1Row, P2Row, BallRow} combine_state;
+int Combine_SM_Tick(int state) {
+	switch (state) {
+		case P1Row:
+			PORTD = player1Row;
+			PORTC = 0x80;
+			state = P2Row;
+			break;
+		case P2Row:
+			PORTD = player2Row;
+			PORTC = 0x01;
+			state = BallRow;
+			break;
+		case BallRow:
+			PORTD = row;
+			PORTC = col;
+			state = P1Row;
+			break;
 		default:
 			break;
 	}
@@ -325,7 +353,7 @@ int main(void) {
 	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6 };
 	unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 
-	task1.state = ShiftDown;
+  	task1.state = ShiftDown;
 	task1.period = ballSpeed;
 	task1.elapsedTime = task1.period;
 	task1.TickFct = &Vertical_Ball_SM_Tick;
@@ -335,43 +363,48 @@ int main(void) {
 	task2.elapsedTime = task2.period;
 	task2.TickFct = &Horizontal_Ball_SM_Tick;
 
-	
-	task3.state = Player1Start;
-	task3.period = 100;
+  	task3.state = P1Row;
+	task3.period = 50;
 	task3.elapsedTime = task3.period;
-	task3.TickFct = &Player_SM_Tick;
+	task3.TickFct = &Combine_SM_Tick;
 
-	task4.state = Row1;
-	task4.period = 50;
+	task4.state = P1Start;
+	task4.period = 100;
 	task4.elapsedTime = task4.period;
-	task4.TickFct = &Combine_SM_Tick;
+	task4.TickFct = &Player1_SM_Tick;
 
-	task5.state = S1;
-	task5.period = 7000;
+	// will be changed to score SM and separate AI
+	task5.state = AIInit;
+	task5.period = ballSpeed;
 	task5.elapsedTime = task5.period;
 	task5.TickFct = &AI_SM_Tick;
 
-	task6.state = ResetButtonWait;
-	task6.period = 7000;
-	task6.elapsedTime = task6.period;
+  	task6.state = ResetButtonWait;
+	task6.period = ballSpeed;
+	task6.elapsedTime = task5.period;
 	task6.TickFct = &Reset_SM_Tick;
 
 	TimerSet(1);
 	TimerOn();
 
 	unsigned short i;
-    /* Insert your solution below */
-    while (1) {
-	for (i = 0; i < numTasks; i++) {
-		if (tasks[i]->elapsedTime == tasks[i]->period) {
-			tasks[i]->state = tasks[i]->TickFct(tasks[i]->state);
-			tasks[i]->elapsedTime = 0;
-		}
-		tasks[i]->elapsedTime += 50;
-	}
+    	/* Insert your solution below */
+    	while (1) {
+     		 for (i = 0; i < numTasks; i++) {
+       			if (tasks[i]->elapsedTime == tasks[i]->period) {
+        			  tasks[i]->state = tasks[i]->TickFct(tasks[i]->state);
+        			  tasks[i]->elapsedTime = 0;
+					
+				  if (i == 0 || i == 1) {  
+				 	 tasks[i]->period = ballSpeed;
+				  }
+        		}
+        		tasks[i]->elapsedTime += 50;
+      		}
 
-	while(!TimerFlag);
-	TimerFlag = 0;
-    }
+	    while(!TimerFlag);
+	    TimerFlag = 0;
+    	}
+
     return 1;
 }
