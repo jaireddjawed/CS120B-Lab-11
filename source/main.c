@@ -258,7 +258,7 @@ int main(void) {
 	task4.TickFct = &Player1_SM_Tick;
 
   task5.state = ResetButtonWait;
-	task5.period = 100;
+	task5.period = 7000;
 	task5.elapsedTime = task5.period;
 	task5.TickFct = &Reset_SM_Tick;
 
