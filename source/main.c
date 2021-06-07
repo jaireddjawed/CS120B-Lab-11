@@ -27,12 +27,18 @@ unsigned char col = 0x10;
 // default speed of ball
 int ballSpeed = 7000;
 
-unsigned char player1Score = 0x00;
+// player1Score is 1 here because it acts as an indicator for which mode the second player is in (ai or human)
+// before the start of the game
+// once the game starts, it's set to 0
+
+unsigned char player1Score = 0x01;
 unsigned char player2Score = 0x00;
 
 // row of player 1 and 2
 unsigned char player1Row = 0xF1;
 unsigned char player2Row = 0xF1;
+
+int AIEnabled = 1;
 
 int getRandomNum() {
 	return rand();
@@ -45,7 +51,7 @@ int Vertical_Ball_SM_Tick(int state) {
 	switch (state) {
 		case ShiftUp:
 			// side paddle collision collision detection
-			if (col == 0x40 && ((player1Row >> 1) & tmp) != 0 /*|| (col == 0x02 && ((player2Row << 1) & tmp) != 0)*/) {
+			if (col == 0x40 && ((player1Row >> 1) & tmp) != 0 || (col == 0x02 && ((player2Row << 1) & tmp) != 0)) {
 				state = ShiftDown;
 
 				// speed up ball once a side paddle hits it
@@ -59,7 +65,7 @@ int Vertical_Ball_SM_Tick(int state) {
 			break;
 		case ShiftDown:
 			// side paddle collision detection
-			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0) /*|| (col == 0x02 && ((player2Row << 1) & tmp) != 0) */) {
+			if ((col == 0x40 && ((player1Row << 1) & tmp) != 0) || (col == 0x02 && ((player2Row << 1) & tmp) != 0)) {
 				state = ShiftUp;
 
 				// speed up side paddle once 
@@ -221,6 +227,66 @@ int Player1_SM_Tick(int state) {
 	return state;
 }
 
+enum Player2States {
+	Player2Start,
+	Player2UpKeyPress,
+	Player2UpKeyRelease,
+	Player2DownKeyPress,
+	Player2DownKeyRelease
+} player2_state;
+
+unsigned char Player2_SM_Tick(int state) {
+	unsigned char x = GetKeypadKey();
+
+	// if AI is not enabled, player 2 can play
+	if (AIEnabled == 0) {
+		switch(state) {
+			case Player2Start:
+				if (x == '1') {
+					state = Player2UpKeyPress;
+				}
+				if (x == '2') {
+					state = Player2DownKeyPress;
+				}
+				break;
+			case Player2UpKeyPress:
+				state = Player2UpKeyRelease;
+				break;
+			case Player2UpKeyRelease:
+				if (x != '1') {
+				       state = Player2Start;
+				}
+		 		break;
+			case Player2DownKeyPress:
+				state = Player2DownKeyRelease;
+				break;
+			case Player2DownKeyRelease:
+				if (x != '2') {
+					state = Player2Start;
+				}
+			default:
+				break;		
+		}
+
+		switch (state) {
+			case Player2UpKeyPress:
+				if (player2Row <= 0xF1){
+					player2Row = (0x01 << 7) | (player2Row >> 0x01);
+				}
+				break;
+			case Player2DownKeyPress:
+				if (player2Row >= bottomRow) {
+					unsigned char tmp = player2Row;
+					player2Row = (tmp << 1) | 0x01;
+				}
+			default:
+				break;
+		}
+	}
+
+	return state;
+}
+
 enum ResetStates {
 	ResetButtonWait,
 	ResetButtonPress,
@@ -280,38 +346,38 @@ int AI_SM_Tick(int state) {
 	// if the ball is one column ahead and in the same row
 	// as one of the piecies of the paddle
 	
+	if (AIEnabled == 0) {
+		switch (state) {
+			case AIInit:
+				state = AIWait;
+				break;
+			case AIWait:
+			default:
+				break;
+		}
 
-	switch (state) {
-		case AIInit:
-			state = AIWait;
-			break;
-		case AIWait:
-		default:
-			break;
+
+		int move;
+
+		switch (state) {
+			case AIWait:
+
+				move = getRandomNum() % 2;
+
+				if (col == 0x08 && move == 0 && player2Row <= 0xF1) {
+					player2Row = (0x01 << 7) | (player2Row >> 1);
+				}
+				if(col == 0x08 && move == 1 && player2Row >= 0xF1) {
+					unsigned char tmp = player2Row;
+					tmp ^= 0x80;
+					player2Row = (tmp << 1) | 0x01;
+				}
+				break;
+			case AIInit:
+			default:
+				break;
+		}
 	}
-
-
-	int move;
-
-	switch (state) {
-		case AIWait:
-
-			move = getRandomNum() % 2;
-
-			if (col == 0x08 && move == 0 && player2Row <= 0xF1) {
-				player2Row = (0x01 << 7) | (player2Row >> 1);
-			}
-			if(col == 0x08 && move == 1 && player2Row >= 0xF1) {
-				unsigned char tmp = player2Row;
-				tmp ^= 0x80;
-				player2Row = (tmp << 1) | 0x01;
-			}
-			break;
-		case AIInit:
-		default:
-			break;
-	}
-
 
 	if (col == 0x80) {
 		if (player2Score == 0x07) {
@@ -334,6 +400,92 @@ int AI_SM_Tick(int state) {
 
 	PORTB = (player2Score << 5) | (player1Score << 2) | PORTB;
 
+	return state;
+}
+
+// allows the choice of either the AI or Human Player for player 2
+enum AI_Player2_States{ ChoiceStart, SinglePlayer, SinglePlayerPress, SinglePlayerRelease, MultiPlayer, MultiPlayerPress, MultiPlayerRelease, StopChoice} ai_player2_state;
+
+// This function will briefly take over player1Score before the game starts to show whether
+// the game is in single or multiplayer mode
+// this function will no longer take action once the game has started
+
+int AI_Player2_Choice_SM_Tick(int state) {
+	switch (state) {
+		case ChoiceStart:
+			state = SinglePlayer;
+			break;
+		case SinglePlayer:
+			if (~PIND & 0x40) {
+				state = MultiPlayerPress;
+			}
+			// the game has now started in singleplayer mode
+			if (~PIND & 0x80) {
+				state = StopChoice;
+			}
+			break;
+		case SinglePlayerPress:
+			state = SinglePlayerRelease;
+			break;
+		case SinglePlayerRelease:
+			if (!(~PIND & 0x40)) {
+				state = SinglePlayer;
+			}
+			
+			// if start button is pressed
+			// start game in singleplayer mode
+			// then StopChoice
+			if (~PIND & 0x80) {
+				state=StopChoice;
+			}
+			break;
+		case MultiPlayer:
+			if (~PIND & 0x40) {
+				state = SinglePlayerPress;
+			}
+			// the game has now started in mutliplayer mode
+			if (~PIND & 0x80) {
+				state = StopChoice;
+			}
+			break;
+		case MultiPlayerPress:
+			state = MultiPlayerRelease;
+			break;
+		case MultiPlayerRelease:
+			if (!(~PIND & 0x40)) {
+				state = MultiPlayer;
+			}
+
+			if (~PIND & 0x80) {
+				state = StopChoice;
+			}
+			break;
+		case StopChoice:
+			break;
+		default:
+			state = ChoiceStart;
+			break;
+	}
+
+
+	switch (state) {
+		case ChoiceStart:
+		case SinglePlayerPress:
+			player1Score = 0x01;
+			AIEnabled = 1;
+			break;
+		case MultiPlayerPress:
+			player1Score = 0x03;
+			AIEnabled = 0;
+			break;
+		default:
+			break;
+	}
+
+	// start
+	// sets player1Score to 0x01
+	// press button
+	// moves to multiplayer state
 	return state;
 }
 
@@ -365,14 +517,15 @@ int Combine_SM_Tick(int state) {
 int main(void) {
     /* Insert DDR and PORT initializations */
 	// B0, B1 inputs, the rest of B is output
+	DDRA = 0xF0; PORTA = 0x0F;
 	DDRB = 0xFC; PORTB = 0x03;
 	DDRC = 0xFF; PORTC = 0x00;
 	DDRD = 0x7F; PORTD = 0x80;
 
 	srand(time(NULL));
 
-	static task task1, task2, task3, task4, task5, task6;
-	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6 };
+	static task task1, task2, task3, task4, task5, task6, task7, task8;
+	task *tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8 };
 	unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 
   	task1.state = ShiftDown;
@@ -405,6 +558,16 @@ int main(void) {
 	task6.period = ballSpeed;
 	task6.elapsedTime = task5.period;
 	task6.TickFct = &Reset_SM_Tick;
+
+	task7.state = Player2Start;
+	task7.period = 100;
+	task7.elapsedTime = task7.period;
+	task7.TickFct = &Player2_SM_Tick;
+
+	task8.state = ChoiceStart;
+	task8.period = 50;
+	task8.elapsedTime = task8.period;
+	task8.TickFct = &AI_Player2_Choice_SM_Tick;
 
 	TimerSet(1);
 	TimerOn();
